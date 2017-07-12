@@ -1,0 +1,463 @@
+<html>
+	<head>
+		
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% }
+			.button {
+				background-color: #4CAF50; /* Green */
+				border: none;
+				color: white;
+				padding: 15px 32px;
+				text-align: center;
+				text-decoration: none;
+				display: inline-block;
+				font-size: 16px;
+}
+		</style>
+	</head>
+	<body>
+	
+	<button class="button"type="button" onclick="increase()">Increase</button>
+	<button class="button"type="button" onclick="decrease()">Decrease</button>
+	<button class="button"type="button" onclick="left()">Left</button>
+	<button class="button"type="button" onclick="right()">Right</button>
+	<button class="button"type="button" onclick="stop()">Stop</button>
+	
+		<script src="three.js"></script>
+		<script src="js/OrbitControls.js"></script>
+		<script src="splines.js"></script>
+		<script src="cylinders.js"></script>
+		<input id="sides"type="number" value="" onchange="setN(value)"></input> 
+		
+		<script>
+			var theta=0;
+			var selected=0;
+			var current=0;
+			var direction=0;
+			
+			var n=6;
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 60, window.innerWidth/window.innerHeight, 0.1, 1000 );
+			//var look=new THREE.lookAt(THREE.vector3(0,0,0));
+			var renderer = new THREE.WebGLRenderer();
+			var endpoints;
+			
+			var object1;
+			var midpoints;
+			var vert1;
+			var vert2;
+			var vector;
+			var mag;
+			var a,b,c,d;
+			var Rx=new THREE.Matrix4();
+			var RxInv=new THREE.Matrix4();
+			var Ry=new THREE.Matrix4();
+			var RyInv=new THREE.Matrix4();
+			var Rz=new THREE.Matrix4();
+			var translation=new THREE.Matrix4();
+			var transReverse=new THREE.Matrix4();
+			var tubes=[];
+			var tangles=[];
+			
+			
+		window.onload=function init(){
+			current=0;
+			console.log(n);
+			
+			////////////////////////////////////////////////////////////////////////////////////////
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.setClearColor(0xdddddd);
+			renderer.shadowMapEnabled=true;
+			renderer.shadowMapSoft=true;
+			document.body.appendChild( renderer.domElement );
+			document.getElementById("sides").select();
+
+			document.getElementById("sides").onchange =
+				function(event){ 
+								while(scene.children.length > 0){ 
+									scene.remove(scene.children[0]); 
+								}
+								render();
+								n = event.target.value;
+								init();
+								};
+			
+			var pointlight=new THREE.PointLight(0xffffff);
+			pointlight.castShadow=true;
+			pointlight.position.set(15,0,20);
+			//scene.add(pointlight);
+			
+			var axis=new THREE.AxisHelper(3);
+			//scene.add(axis);
+			var planeGeometry=new THREE.PlaneGeometry(150,100,80);
+			var planeMaterial=new THREE.MeshLambertMaterial({color: 0x00ff00});
+			var plane=new THREE.Mesh(planeGeometry, planeMaterial);
+			//plane.rotation.z=15*Math.PI;
+			plane.receiveShadow=true;
+			plane.position.z=-20;
+			//scene.add(plane);
+			//camera.position.x=20;
+			camera.position.z = 50;
+			camera.position.y=-50;
+
+			camera.up = new THREE.Vector3(0,0,1);
+			camera.lookAt(new THREE.Vector3(0,100,0));
+			controls = new THREE.OrbitControls(camera,renderer.domElement);
+               
+			/////////////////////////////////spline////////////////////
+			var endpDup=new Array(n);
+			for(var i=0;i<n;i++){
+				endpDup[i]=new Array(4);
+			}
+			this.endpoints=endpDup;
+			var object=new Array(n);
+			for(var i=0;i<n;i++){
+				object[i]=[];
+			}
+			this.object1=object;
+			var mid=new Array(n);
+			for(var i=0;i<n;i++){
+				mid[i]=new Array(4);
+			}
+			midpoints=mid;
+			//var newtangles=[];
+			//tangles=newtangles;
+			tangles=createWires(n);
+			
+			for(var i=0;i<n;i++){
+				endpoints[i][0]=tangles[i].geometry.vertices[0];			//start end
+				endpoints[i][1]=tangles[i].geometry.vertices[1];			//start end
+				endpoints[i][2]=tangles[i].geometry.vertices[88];		//finish end
+				endpoints[i][3]=tangles[i].geometry.vertices[89];		//finish end
+			}
+			
+			for(var i=0;i<n;i++){
+				midpoints[i][0]=tangles[i].geometry.vertices[22];			//start end
+				midpoints[i][1]=tangles[i].geometry.vertices[45];			//start end
+				midpoints[i][2]=tangles[i].geometry.vertices[67];		//finish end
+			}
+			
+			vert1=endpoints[0][3];
+			vert2=endpoints[0][2];
+			
+			vector=[vert2.x-vert1.x,vert2.y-vert1.y,vert2.z-vert1.z,1];
+			mag=vector[0]*vector[0]+vector[1]*vector[1]+vector[2]*vector[2];
+			
+			mag=Math.sqrt(mag);
+			a=vector[0]/mag;
+			b=vector[1]/mag;
+			c=vector[2]/mag;
+			d=b*b+c*c;
+			d=Math.sqrt(d);
+			Rx.set(
+				1,0,0,0,
+				0,c/d,-b/d,0,
+				0,b/d,c/d,0,
+				0,0,0,1
+			);
+			RxInv.set(
+				1,0,0,0,
+				0,c/d,b/d,0,
+				0,-b/d,c/d,
+				0,0,0,1
+			);
+			Ry.set(
+				d,0,-a,0,
+				0,1,0,0,
+				a,0,d,0,
+				0,0,0,1
+			);
+			RyInv.set(
+				d,0,a,0,
+				0,1,0,0,
+				-a,0,d,0,
+				0,0,0,1
+			);
+			Rz.set(
+				Math.cos(theta), -Math.sin(theta),0,0,
+				Math.sin(theta), Math.cos(theta),0,0,
+				0,0,1,0,
+				0,0,0,1
+			);
+			translation.set(
+				1,0,0,-vert1.x,
+				0,1,0,-vert1.y,
+				0,0,1,-vert1.z,
+				0,0,0,1
+			);
+			transReverse.set(
+				1,0,0,vert1.x,
+				0,1,0,vert1.y,
+				0,0,1,vert1.z,
+				0,0,0,1
+			);
+			//var cyl1=cylinderMesh(new THREE.Vector3(5,0,0),new THREE.Vector3(0,0,0));
+			
+		
+		tubes=splines(n);
+		
+		////////////////////////mouse detection///////////////////////
+		
+		document.addEventListener( 'mousedown', onDocumentMouseDown );
+
+        function onDocumentMouseDown( event ) {    
+            event.preventDefault();
+            var mouse3D = new THREE.Vector3( ( (event.clientX -renderer.domElement.offsetLeft) / renderer.domElement.width ) * 2 - 1,   
+                                    -( (event.clientY - renderer.domElement.offsetTop) / renderer.domElement.height ) * 2 + 1);     
+            
+			
+			var raycaster =  new THREE.Raycaster();
+			
+			raycaster.setFromCamera( mouse3D, camera );
+			var intersect = [];
+			for(var i=0;i<n;i++){
+				intersect.push( raycaster.intersectObjects( object1[i]));
+			}
+			
+			for(var i=0;i<n;i++){
+			
+				if(intersect[ i ].length>0){
+					console.log("tangle"+i+" is selected");
+					current=i;
+				}
+			
+			}
+            
+        }
+		//console.log(tangles[n-1].matrixWorld.multiplyVector3(tangles[n-1].geometry.vertices[22].clone()));
+		//tangles[n-1].rotation.y+=1;
+		//console.log(tangles[n-1].matrixWorld.multiplyVector3(tangles[n-1].geometry.vertices[22].clone()));
+		render();
+	}
+		
+		
+		
+		
+//////////////////////////////////////////////////render///////
+			
+		function render() {
+				//requestAnimationFrame( render );
+				//console.log(n);
+				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			vector=[vert2.x-vert1.x,vert2.y-vert1.y,vert2.z-vert1.z,1];
+			mag=vector[0]*vector[0]+vector[1]*vector[1]+vector[2]*vector[2];
+			
+			mag=Math.sqrt(mag);
+			a=vector[0]/mag;
+			b=vector[1]/mag;
+			c=vector[2]/mag;
+			d=b*b+c*c;
+			d=Math.sqrt(d);
+			Rx.set(
+				1,0,0,0,
+				0,c/d,-b/d,0,
+				0,b/d,c/d,0,
+				0,0,0,1
+			);
+			RxInv.set(
+				1,0,0,0,
+				0,c/d,b/d,0,
+				0,-b/d,c/d,
+				0,0,0,1
+			);
+			Ry.set(
+				d,0,-a,0,
+				0,1,0,0,
+				a,0,d,0,
+				0,0,0,1
+			);
+			RyInv.set(
+				d,0,a,0,
+				0,1,0,0,
+				-a,0,d,0,
+				0,0,0,1
+			);
+			Rz.set(
+				Math.cos(theta), -Math.sin(theta),0,0,
+				Math.sin(theta), Math.cos(theta),0,0,
+				0,0,1,0,
+				0,0,0,1
+			);
+			translation.set(
+				1,0,0,-vert1.x,
+				0,1,0,-vert1.y,
+				0,0,1,-vert1.z,
+				0,0,0,1
+			);
+			transReverse.set(
+				1,0,0,vert1.x,
+				0,1,0,vert1.y,
+				0,0,1,vert1.z,
+				0,0,0,1
+			);
+			//console.log(tangles[n-1].geometry.vertices[0]);
+			//console.log(tangles[n-1]);
+				//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				for(var i=current+1;i<n;i++){
+					if(direction==1) break;
+					//console.log(n);
+					tangles[i].applyMatrix(translation);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Rx);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Ry);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Rz);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(RyInv);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(RxInv);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(transReverse);
+					tangles[i].updateMatrix();
+					//console.log(tangles[i]+" after");
+					
+					tubes[i].applyMatrix(translation);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Rx);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Ry);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Rz);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(RyInv);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(RxInv);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(transReverse);
+					tubes[i].updateMatrix();
+				}
+				for(var i=current-1;i>=0;i--){
+					if(direction==0) break;
+					tangles[i].applyMatrix(translation);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Rx);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Ry);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(Rz);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(RyInv);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(RxInv);
+					tangles[i].updateMatrix();
+					tangles[i].applyMatrix(transReverse);
+					tangles[i].updateMatrix();
+					
+					tubes[i].applyMatrix(translation);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Rx);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Ry);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(Rz);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(RyInv);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(RxInv);
+					tubes[i].updateMatrix();
+					tubes[i].applyMatrix(transReverse);
+					tubes[i].updateMatrix();
+				}
+				//renderer.autoClear;
+				//renderer.setClearColor (0x000000, 1);
+				//tangles[n-1].rotation.x+=0.01;
+				//console.log(tangles[n-1]);
+				renderer.render(scene, camera);
+				if(theta!=0){
+					for(var i=0;i<n;i++){
+						
+						var vector0 = tangles[i].matrixWorld.multiplyVector3(tangles[i].geometry.vertices[0].clone());
+						var vector1 = tangles[i].matrixWorld.multiplyVector3(tangles[i].geometry.vertices[1].clone());
+						var vector88 = tangles[i].matrixWorld.multiplyVector3(tangles[i].geometry.vertices[88].clone());
+						var vector89 = tangles[i].matrixWorld.multiplyVector3(tangles[i].geometry.vertices[89].clone());
+						endpoints[i][0]=vector0;			//start end
+						endpoints[i][1]=vector1;			//start end
+						endpoints[i][2]=vector88;		//finish end
+						endpoints[i][3]=vector89;		//finish end
+					}
+				}
+				
+				
+			}
+
+			function increase(){
+				if(theta<0)theta=0;
+				theta+=0.01;
+				render();
+			}
+			function decrease(){
+				if(theta>0)theta=0;
+				theta-=0.01;
+				render();
+			}
+			function left(){
+				vert1=endpoints[current][3];
+				vert2=endpoints[current][2];
+				direction=0;
+			}
+			function right(){
+				vert1=endpoints[current][0];
+				vert2=endpoints[current][1];
+				direction=1;
+			}
+			function stop(){
+				theta=0;
+				render();
+			}
+				
+			function setN(tangles){
+				var size=tangles.length;
+				for(var i=0;i<size;i++){
+					
+					tangles.pop();
+				}
+				size=tubes.length;
+				for(var i=0;i<size;i++){
+					
+					console.log("popping "+tubes.pop());
+				}
+				
+				var endpoints=new Array(n);
+				for(var i=0;i<n;i++){
+					endpoints[i]=new Array(4);
+					endpoints[i]=0;
+				}
+				var tangles=[];
+				var object1=new Array(n);
+				for(var i=0;i<n;i++){
+					object1[i]=[];
+				}
+				var midpoints=new Array(n);
+				for(var i=0;i<n;i++){
+					midpoints[i]=new Array(4);
+				}
+				console.log("here "+n);
+				tangles=createWires(n);
+				console.log(tangles[0]);
+				console.log(tangles[1]);
+				
+				for(var i=0;i<n;i++){
+					endpoints[i][0]=tangles[i].geometry.vertices[0];			//start end
+					endpoints[i][1]=tangles[i].geometry.vertices[1];			//start end
+					endpoints[i][2]=tangles[i].geometry.vertices[88];		//finish end
+					endpoints[i][3]=tangles[i].geometry.vertices[89];		//finish end
+				}
+				
+				for(var i=0;i<n;i++){
+					midpoints[i][0]=tangles[i].geometry.vertices[22];			//start end
+					midpoints[i][1]=tangles[i].geometry.vertices[45];			//start end
+					midpoints[i][2]=tangles[i].geometry.vertices[67];		//finish end
+				}
+					
+				tubes=splines(n);
+				console.log("tubes has value "+tubes[tubes.length-1]);
+			}
+	
+		</script>
+		
+	</body>
+</html>
