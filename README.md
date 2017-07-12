@@ -3,6 +3,6 @@ This is a WebGL simulation of a toy which has n pieces of quarter of a circle sh
 How to use:
   1. Open the manual.html file
   2. Default has 6 tangles. Enter number in the type box to change that.
-  3. select any tangle.
+  3. click any tangle to select.
   4. select the left or right button to choose the end around which you want to rotate.
   5. select increase or decrease to rotate clockwise or anticlockwise.
